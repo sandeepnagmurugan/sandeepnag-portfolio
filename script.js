@@ -3,10 +3,12 @@ const nav = document.querySelector("[data-nav]");
 const navToggle = document.querySelector("[data-nav-toggle]");
 const navLinks = [...document.querySelectorAll(".nav a")];
 const revealItems = [...document.querySelectorAll(".reveal")];
-const interactiveCards = [...document.querySelectorAll(".tilt-card, .bento-card, .lane, .cta-card")];
+const hoverGlowItems = [...document.querySelectorAll(".glass")];
+const counters = [...document.querySelectorAll("[data-count]")];
+const parallaxSections = [...document.querySelectorAll("[data-parallax]")];
 
 const setHeaderState = () => {
-  header.classList.toggle("scrolled", window.scrollY > 24);
+  header?.classList.toggle("scrolled", window.scrollY > 18);
 };
 
 setHeaderState();
@@ -15,14 +17,14 @@ window.addEventListener("scroll", setHeaderState, { passive: true });
 navToggle?.addEventListener("click", () => {
   const open = navToggle.getAttribute("aria-expanded") === "true";
   navToggle.setAttribute("aria-expanded", String(!open));
-  nav.classList.toggle("open", !open);
+  nav?.classList.toggle("open", !open);
   document.body.classList.toggle("nav-open", !open);
 });
 
 navLinks.forEach((link) => {
   link.addEventListener("click", () => {
     navToggle?.setAttribute("aria-expanded", "false");
-    nav.classList.remove("open");
+    nav?.classList.remove("open");
     document.body.classList.remove("nav-open");
   });
 });
@@ -30,81 +32,92 @@ navLinks.forEach((link) => {
 const revealObserver = new IntersectionObserver(
   (entries) => {
     entries.forEach((entry) => {
-      if (entry.isIntersecting) {
-        entry.target.classList.add("in-view");
-        revealObserver.unobserve(entry.target);
-      }
+      if (!entry.isIntersecting) return;
+      entry.target.classList.add("in-view");
+      revealObserver.unobserve(entry.target);
     });
   },
-  { threshold: 0.16, rootMargin: "0px 0px -40px" }
+  { threshold: 0.16, rootMargin: "0px 0px -50px" }
 );
 
 revealItems.forEach((item) => revealObserver.observe(item));
 
-const sections = [...document.querySelectorAll("main section[id]")];
-const activeObserver = new IntersectionObserver(
+const counterObserver = new IntersectionObserver(
   (entries) => {
     entries.forEach((entry) => {
       if (!entry.isIntersecting) return;
-      navLinks.forEach((link) => {
-        link.classList.toggle("active", link.getAttribute("href") === `#${entry.target.id}`);
-      });
+      const counter = entry.target;
+      const target = Number(counter.dataset.count);
+      const start = performance.now();
+      const duration = 950;
+
+      const tick = (time) => {
+        const progress = Math.min((time - start) / duration, 1);
+        const eased = 1 - Math.pow(1 - progress, 3);
+        counter.textContent = Math.round(target * eased);
+        if (progress < 1) requestAnimationFrame(tick);
+      };
+
+      requestAnimationFrame(tick);
+      counterObserver.unobserve(counter);
     });
   },
-  { threshold: 0.34 }
+  { threshold: 0.65 }
 );
 
-sections.forEach((section) => activeObserver.observe(section));
+counters.forEach((counter) => counterObserver.observe(counter));
 
-interactiveCards.forEach((card) => {
-  card.addEventListener("pointermove", (event) => {
-    const rect = card.getBoundingClientRect();
-    const x = event.clientX - rect.left;
-    const y = event.clientY - rect.top;
-    const rotateY = ((x / rect.width) - 0.5) * 7;
-    const rotateX = ((y / rect.height) - 0.5) * -7;
-    card.style.setProperty("--x", `${x}px`);
-    card.style.setProperty("--y", `${y}px`);
-
-    if (card.classList.contains("tilt-card")) {
-      card.style.transform = `perspective(900px) rotateX(${rotateX}deg) rotateY(${rotateY}deg) translateY(-4px)`;
-    }
-  });
-
-  card.addEventListener("pointerleave", () => {
-    if (card.classList.contains("tilt-card")) {
-      card.style.transform = "";
-    }
+hoverGlowItems.forEach((item) => {
+  item.addEventListener("pointermove", (event) => {
+    const rect = item.getBoundingClientRect();
+    item.style.setProperty("--x", `${event.clientX - rect.left}px`);
+    item.style.setProperty("--y", `${event.clientY - rect.top}px`);
   });
 });
 
-const counter = document.querySelector("[data-count]");
-let counted = false;
+document.querySelectorAll("[data-accordion]").forEach((accordion) => {
+  const items = [...accordion.querySelectorAll(".accordion-item")];
 
-const countObserver = new IntersectionObserver(
-  ([entry]) => {
-    if (!entry.isIntersecting || counted || !counter) return;
-    counted = true;
-    const target = Number(counter.dataset.count);
-    const start = performance.now();
-    const duration = 900;
+  items.forEach((item) => {
+    const trigger = item.querySelector(".accordion-trigger");
+    const panel = item.querySelector(".accordion-panel");
 
-    const tick = (time) => {
-      const progress = Math.min((time - start) / duration, 1);
-      const eased = 1 - Math.pow(1 - progress, 3);
-      counter.textContent = Math.round(target * eased);
-      if (progress < 1) requestAnimationFrame(tick);
-    };
+    trigger?.addEventListener("click", () => {
+      const isOpen = item.classList.contains("is-open");
 
-    requestAnimationFrame(tick);
-    countObserver.disconnect();
+      items.forEach((otherItem) => {
+        otherItem.classList.remove("is-open");
+        otherItem.querySelector(".accordion-trigger")?.setAttribute("aria-expanded", "false");
+        otherItem.querySelector(".accordion-panel")?.setAttribute("hidden", "");
+      });
+
+      if (!isOpen) {
+        item.classList.add("is-open");
+        trigger.setAttribute("aria-expanded", "true");
+        panel?.removeAttribute("hidden");
+      }
+    });
+  });
+});
+
+let ticking = false;
+const updateParallax = () => {
+  parallaxSections.forEach((section) => {
+    const rect = section.getBoundingClientRect();
+    const offset = Math.round(rect.top * -0.04);
+    section.style.setProperty("--parallax-y", `${offset}px`);
+  });
+  ticking = false;
+};
+
+window.addEventListener(
+  "scroll",
+  () => {
+    if (ticking) return;
+    ticking = true;
+    requestAnimationFrame(updateParallax);
   },
-  { threshold: 0.8 }
+  { passive: true }
 );
 
-if (counter) countObserver.observe(counter);
-
-const marqueeTrack = document.querySelector(".marquee-track");
-if (marqueeTrack) {
-  marqueeTrack.innerHTML += marqueeTrack.innerHTML;
-}
+updateParallax();
